@@ -13,7 +13,33 @@
     <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
          Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-description -->
     <description><![CDATA[
-        Run Open Code Review from IntelliJ IDEA and inspect review comments in the IDE.
+        AI Code Review — powered by the open-code-review CLI.<br/>
+        Bring AI code review into IntelliJ IDEA: start reviews from the tool window,
+        stream logs live, and act on every comment right in the editor.<br/><br/>
+
+        <b>Features</b>
+        <ul>
+            <li>Three review modes: workspace changes, branch comparison, or a single commit.</li>
+            <li>Files-to-review preview, with one click into the native diff view.</li>
+            <li>Custom review prompt: attach an extra background hint to any review.</li>
+            <li>Streaming logs: watch the CLI output live and cancel anytime.</li>
+            <li>Two-way sync: comment cards in the tool window and inline comment panels in
+                the editor stay in sync — apply, dismiss, or flag as false positive on either side.</li>
+            <li>Dedicated empty / cancelled / failed states; failures are retryable and surface
+                the real CLI error.</li>
+            <li>Built-in configuration panel: edit LLM provider settings, switch models, and
+                test connectivity without leaving the IDE.</li>
+        </ul>
+
+        <b>Prerequisites</b>
+        <ul>
+            <li>Install the ocr CLI: <code>npm i -g @alibaba-group/open-code-review</code></li>
+            <li>Configure an LLM provider (endpoint, API key, model) via the CLI or the plugin's
+                configuration panel.</li>
+        </ul>
+
+        Source code &amp; issue tracker:
+        <a href="https://github.com/alibaba/open-code-review">github.com/alibaba/open-code-review</a>
     ]]></description>
 
     <!-- Product and plugin compatibility requirements.
