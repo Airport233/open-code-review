@@ -79,7 +79,8 @@ class CliService(private val cliPath: String = "ocr") {
             runCatching { process.inputStream.bufferedReader().forEachLine { synchronized(out) { out.appendLine(it) } } }
         }, "ocr-probe-$bin").apply { isDaemon = true; start() }
         if (!process.waitFor(PROBE_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
-            process.destroyForcibly()
+            // Windows 上探测经 cmd.exe 套壳，只杀壳会留下卡死的 node/npm，须树级强杀。
+            destroyTreeForcibly(process)
             // 进程被强杀后 stdout 管道关闭、reader 将很快 EOF 退出；短 join 避免 daemon 线程在反复环境检查中堆积。
             reader.join(500)
             // 关流与 runRaw/install 的清理一致，避免高频环境检查下 fd 累积到 GC。
@@ -136,8 +137,9 @@ class CliService(private val cliPath: String = "ocr") {
                 }
                 exit == 0
             } finally {
-                // 与 runRaw 对齐：异常路径（forEachLine 抛 IOException 等）下进程可能仍存活，强杀 + 关流兜底，避免僵尸与 fd 泄漏。
-                if (process.isAlive) process.destroyForcibly()
+                // 与 runRaw 对齐：异常路径（forEachLine 抛 IOException 等）下进程可能仍存活，树级强杀 + 关流兜底。
+                // 不加 isAlive 守卫：树级强杀对已死进程无害（枚举返回空、destroyForcibly 为 no-op），且检查-枚举之间留竞态窗口不如尽早枚举。
+                destroyTreeForcibly(process)
                 process.closeStreamsQuietly()
                 installProcess.compareAndSet(process, null)
             }
@@ -163,14 +165,19 @@ class CliService(private val cliPath: String = "ocr") {
             .start()
         // 先注册到 current（紧贴 start，盲区最短），再关 stdin：若 close 抛异常，进程已登记、cancel 仍可杀，不致脱管。
         current.getAndSet(process)?.let { stale ->
-            if (stale.isAlive) {
-                thisLogger().warn("[ocr] 上一个 CLI 进程仍在运行，已终止")
-                stale.destroy()
-                // 等 SIGTERM 生效，避免新旧 CLI 进程并行读写同一仓库/配置；超时则强杀。
-                if (!stale.waitFor(FORCE_KILL_DELAY_MS, TimeUnit.MILLISECONDS)) {
-                    thisLogger().warn("[ocr] 上一个 CLI 进程 ${FORCE_KILL_DELAY_MS}ms 未退出，强制终止")
-                    stale.destroyForcibly()
+            try {
+                if (stale.isAlive) {
+                    thisLogger().warn("[ocr] 上一个 CLI 进程仍在运行，已终止")
+                    val descendants = destroyGracefully(stale)
+                    // 等 SIGTERM 生效，避免新旧 CLI 进程并行读写同一仓库/配置。
+                    if (!stale.waitFor(FORCE_KILL_DELAY_MS, TimeUnit.MILLISECONDS)) {
+                        thisLogger().warn("[ocr] 上一个 CLI 进程 ${FORCE_KILL_DELAY_MS}ms 未退出，强制终止")
+                    }
+                    // 父进程退出不等于孙进程已死（旧版 launcher 不转发信号），树级收尾无条件执行。
+                    destroyTreeForcibly(stale, descendants)
                 }
+            } finally {
+                // 关流必须在 finally：waitFor 被中断等异常路径下也不能泄漏 stale 进程的 fd。
                 stale.closeStreamsQuietly()
             }
         }
@@ -195,7 +202,8 @@ class CliService(private val cliPath: String = "ocr") {
             return stdout
         } finally {
             // 先强杀、再关流、最后释放 current：杀在前使并发 cancel 看到的是已死进程，且不让新 runRaw 在旧进程仍活时抢占槽位。
-            if (process.isAlive) process.destroyForcibly()
+            // 不加 isAlive 守卫：树级强杀对已死进程无害（枚举返回空、destroyForcibly 为 no-op），且检查-枚举之间留竞态窗口不如尽早枚举。
+            destroyTreeForcibly(process)
             // 异常路径下 stderrThread 可能仍在读 errorStream；先等它收尾再关流，避免打断它丢日志行（成功路径上面已 join，此处幂等）。
             stderrThread.join(2_000)
             process.closeStreamsQuietly()
@@ -225,19 +233,54 @@ class CliService(private val cliPath: String = "ocr") {
         }.getOrElse { false to (it.message ?: it.javaClass.simpleName) }
     }
 
-    /** 先 SIGTERM，3 秒后仍存活则 SIGKILL。只取消 review（current 槽）；install 有独立生命周期，不在此处殃及。 */
+    /** 先 SIGTERM，3 秒后仍存活则对整棵进程树 SIGKILL。只取消 review（current 槽）；install 有独立生命周期，不在此处殃及。 */
     fun cancel() {
         // 取走 current 槽里此刻 tracked 的 review 进程并终止。getAndSet 取的是"此刻槽里的那个"——若期间有新 runRaw
         // 接管了 current，被取走的就是新进程。CliService 这层无 session 身份，无法保证杀的恰是"用户想取消的那轮"；
         // 正常流程下 startReview 先 cancel 旧 session 再建新 session，使 current 始终对应当前轮，误杀仅多轮极端竞态下理论存在。
         val process = current.getAndSet(null) ?: return
         if (!process.isAlive) return
-        process.destroy()
+        val descendants = destroyGracefully(process)
         AppExecutorUtil.getAppScheduledExecutorService().schedule(
-            { if (process.isAlive) process.destroyForcibly() },
+            {
+                runCatching {
+                    destroyTreeForcibly(process, descendants)
+                    // 流正常由 runRaw 的 finally 关闭，此处幂等兜底（双关安全）。
+                    process.closeStreamsQuietly()
+                }.onFailure { thisLogger().warn("[ocr] 强制终止进程树失败", it) }
+            },
             FORCE_KILL_DELAY_MS,
             TimeUnit.MILLISECONDS,
         )
+    }
+
+    /**
+     * 进程树终止。destroy()/destroyForcibly() 只作用于直接子进程；孙进程（npm 全局 ocr 是 Node
+     * launcher，由它再 spawn Go 二进制）在父进程死后被托管到系统根进程，descendants() 便再不可见。
+     * 所以优雅阶段先快照子孙、只信号父进程（新版 launcher 会把 SIGTERM 转发给 Go 自行清理，
+     * 重复信号子孙可能打断其清理）；强杀阶段以快照为准并补一次实时枚举，兜住快照后新出现的子孙。
+     * 返回的快照句柄在孙进程被托管后依然有效，是强杀阶段唯一可靠的追杀依据。
+     */
+    private fun destroyGracefully(process: Process): List<ProcessHandle> {
+        // 枚举失败（极端平台问题）时退回空快照：宁可强杀阶段漏杀，也不能让调用方的关流收尾被异常跳过。
+        val descendants = runCatching { process.toHandle().descendants().toList() }.getOrDefault(emptyList())
+        process.destroy()
+        return descendants
+    }
+
+    /**
+     * 强杀整棵树。顺序有讲究：实时枚举必须在杀父进程之前（父进程死后子孙被托管到系统根进程，
+     * descendants() 便再不可见）；杀父优先于杀子孙，防止父进程（npm lifecycle、supervisor 类）
+     * 在子孙被杀后、自己被杀前又 spawn 出新子孙。单个句柄强杀失败不阻断其余。
+     * 无快照调用为 best-effort：进程若在枚举前一瞬刚好退出，子孙已随父进程之死被托管而不可见，
+     * 该竞态窗口为纳秒级，仅存在于异常兜底路径，可接受；关键路径（cancel/stale）须传入快照。
+     */
+    private fun destroyTreeForcibly(process: Process, snapshot: List<ProcessHandle> = emptyList()) {
+        // 实时枚举失败不阻断后续：快照 + 父进程强杀仍须执行，保证本方法不向外抛异常。
+        val live = runCatching { process.toHandle().descendants().toList() }.getOrDefault(emptyList())
+        val tree = (snapshot + live).distinctBy(ProcessHandle::pid)
+        runCatching { process.destroyForcibly() }
+        tree.forEach { runCatching { it.destroyForcibly() } }
     }
 
     /** 关掉进程的三路流，吞掉 close() 声明的 IOException，不吞 InterruptedException 等运行期信号。 */
@@ -247,17 +290,22 @@ class CliService(private val cliPath: String = "ocr") {
         try { errorStream.close() } catch (_: IOException) {}
     }
 
-    /** 终止并清理上一个 npm install：先 SIGTERM+宽限（与 runRaw 的 stale 处理一致，给 npm 清理机会），再关流。 */
+    /** 终止并清理上一个 npm install：先 SIGTERM+宽限（与 runRaw 的 stale 处理一致，给 npm 清理机会），再树级强杀、关流。 */
     private fun killStaleInstall(stale: Process) {
-        if (stale.isAlive) {
-            thisLogger().warn("[ocr] 上一个 npm install 仍在运行，已终止")
-            stale.destroy()
-            if (!stale.waitFor(FORCE_KILL_DELAY_MS, TimeUnit.MILLISECONDS)) {
-                thisLogger().warn("[ocr] 上一个 npm install ${FORCE_KILL_DELAY_MS}ms 内未退出，强制终止")
-                stale.destroyForcibly()
+        try {
+            if (stale.isAlive) {
+                thisLogger().warn("[ocr] 上一个 npm install 仍在运行，已终止")
+                val descendants = destroyGracefully(stale)
+                if (!stale.waitFor(FORCE_KILL_DELAY_MS, TimeUnit.MILLISECONDS)) {
+                    thisLogger().warn("[ocr] 上一个 npm install ${FORCE_KILL_DELAY_MS}ms 内未退出，强制终止")
+                }
+                // npm 的子孙（lifecycle 脚本、node-gyp 等）不随父进程退出，必须树级收尾。
+                destroyTreeForcibly(stale, descendants)
             }
+        } finally {
+            // 关流必须在 finally：waitFor 被中断等异常路径下也不能泄漏 stale 进程的 fd。
+            stale.closeStreamsQuietly()
         }
-        stale.closeStreamsQuietly()
     }
 
     private fun ProcessBuilder.withShellEnv(vararg extra: Pair<String, String>): ProcessBuilder = apply {
