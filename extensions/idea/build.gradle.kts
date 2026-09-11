@@ -47,6 +47,14 @@ intellijPlatform {
 
         changeNotes = "Initial IntelliJ IDEA implementation."
     }
+
+    // verifyPlugin 要求显式声明验证目标 IDE（2.x 不再隐式推导）；与构建用同一版本，本地缓存可复用。
+    // 只影响 verifyPlugin 这个检查任务，不参与打包，产物 zip 内容不变。
+    pluginVerification {
+        ides {
+            ide("IC", providers.gradleProperty("platformVersion").get())
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

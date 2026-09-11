@@ -9,6 +9,7 @@ import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.util.Disposer
 import com.intellij.ui.JreHiDpiUtil
 import com.intellij.ui.jcef.JBCefBrowser
+import com.intellij.ui.jcef.JBCefBrowserBase
 import com.intellij.ui.jcef.JBCefJSQuery
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
@@ -32,7 +33,8 @@ internal class OcrWebview(
     }
 
     private val browser = JBCefBrowser()
-    private val query = JBCefJSQuery.create(browser)
+    // create(JBCefBrowser) 重载是 scheduled-for-removal API（Plugin Verifier/市场审核会点名），用 JBCefBrowserBase 重载。
+    private val query = JBCefJSQuery.create(browser as JBCefBrowserBase)
 
     @Volatile
     private var disposed = false
