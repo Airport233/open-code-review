@@ -112,7 +112,7 @@ export interface CliRunOptions {
   concurrency?: number;
 }
 
-/** 审查完成后的评论挂载上下文（与 CliRunOptions 字段一致）。 */
+/** Comment anchor context after a review completes (matches CliRunOptions fields). */
 export type ReviewContext = Pick<CliRunOptions, 'mode' | 'from' | 'to' | 'commit'>;
 
 export interface CommentSyncState {

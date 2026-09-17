@@ -1,12 +1,20 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 alibaba/open-code-review Contributors
+
 import { HostToWebview, WebviewToHost } from '../shared/messages';
 
 /**
- * frontend/ 目录里唯一相对上游改写的文件，其余与上游逐字节相同（改动请回上游改）。
+ * The only file under frontend/ that diverges from upstream; everything else is
+ * byte-identical to upstream (send changes there instead).
  *
- * 上游走 `acquireVsCodeApi()` + `addEventListener('message')`；IDEA 没这套 API，宿主注入两个全局：
- * `window.__ocrPost(json)`（JBCefJSQuery 注入，回传 Kotlin）、`window.__ocrReceive(msg)`（Kotlin 调，推进页面）。
+ * Upstream uses `acquireVsCodeApi()` + `addEventListener('message')`; IDEA has
+ * no such API, so the host injects two globals:
+ * `window.__ocrPost(json)` (injected via JBCefJSQuery, delivers to Kotlin) and
+ * `window.__ocrReceive(msg)` (called by Kotlin, pushes into the page).
  *
- * `onMessage` 保持"可多次订阅+返回退订"语义：上游 useEffect 这么用，直接覆盖成单 handler 会把第二个订阅者顶掉。
+ * `onMessage` keeps the "multi-subscribe + unsubscribe handle" semantics:
+ * upstream useEffect relies on them, and replacing this with a single-handler
+ * assignment would silently drop the second subscriber.
  */
 
 declare global {
@@ -20,13 +28,14 @@ type Handler = (msg: HostToWebview) => void;
 
 const handlers = new Set<Handler>();
 
-// 宿主侧 executeJavaScript 调的就是这个函数。注册一次，之后只往 handlers 里分发。
+// The host calls this exact function via executeJavaScript. Registered once,
+// it only dispatches into handlers from then on.
 window.__ocrReceive = (msg: unknown): void => {
   handlers.forEach((handler) => {
     try {
       handler(msg as HostToWebview);
     } catch (err) {
-      // 一个订阅者抛异常不该让别的订阅者收不到消息。
+      // One subscriber throwing must not stop the others from receiving the message.
       console.error('[ocr] message handler failed', err);
     }
   });

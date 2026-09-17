@@ -36,7 +36,7 @@ export interface ActiveProviderSummary {
   detail?: string;
 }
 
-/** 描述 config.json 中当前生效的 Provider（非表单草稿）。 */
+/** Describes the provider currently active in config.json (not the form draft). */
 export function describeActiveProvider(config: OcrConfig | null): ActiveProviderSummary | null {
   if (!config) return null;
 
@@ -68,7 +68,7 @@ export function describeActiveProvider(config: OcrConfig | null): ActiveProvider
     return {
       kind: 'legacy',
       name: 'legacy',
-      displayName: 'Legacy LLM 端点',
+      displayName: 'Legacy LLM endpoint',
       model: config.llm.model,
       detail: config.llm.url,
     };
@@ -77,7 +77,7 @@ export function describeActiveProvider(config: OcrConfig | null): ActiveProvider
   return null;
 }
 
-/** 判断配置是否足以发起审查（与 resolver 要求对齐，官方 provider 允许仅依赖环境变量中的 API Key） */
+/** Checks whether the config is sufficient to start a review (aligned with resolver requirements; an official provider may rely solely on the API key from the environment). */
 export function isConfigReady(config: OcrConfig | null): boolean {
   if (!config) return false;
 
