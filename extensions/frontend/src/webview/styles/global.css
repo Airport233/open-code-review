@@ -1,8 +1,9 @@
 /* === 1. CSS Variables ===
- * 结构色映射到 VSCode 主题 token(带 silent-night 回退值),自动适配亮/暗主题。
- * accent(薄荷绿)保留为品牌色,不跟随主题。 */
+ * Structural colors map to VSCode theme tokens (with silent-night fallback
+ * values), adapting to light/dark themes automatically.
+ * The accent (mint green) stays a fixed brand color and does not follow the theme. */
 :root {
-  /* 背景层:sidebar / 输入 / hover */
+  /* Background layer: sidebar / input / hover */
   --bg: var(--vscode-sideBar-background, #0a0d12);
   --bg-soft: var(--vscode-sideBarSectionHeader-background, #11151a);
   --bg-deeper: var(--vscode-editor-background, #06090d);
@@ -10,7 +11,7 @@
   --card-soft: var(--vscode-list-hoverBackground, #1a1f27);
   --card-quiet: var(--vscode-list-activeSelectionBackground, #20262f);
   --card-deeper: var(--vscode-input-background, #0d1015);
-  /* 文字层 */
+  /* Text layer */
   --ink: var(--vscode-foreground, #ececec);
   --ink-soft: var(--vscode-foreground, #b8b8b2);
   --ink-quiet: var(--vscode-descriptionForeground, #7e828a);
@@ -19,13 +20,13 @@
   --moon-soft: var(--vscode-descriptionForeground, #b8b8b3);
   --moon-quiet: var(--vscode-descriptionForeground, #6b6f76);
   --moon-faint: var(--vscode-disabledForeground, #4a4f56);
-  /* 边框 */
+  /* Borders */
   --rule: var(--vscode-widget-border, rgba(255, 255, 255, 0.07));
   --rule-soft: var(--vscode-widget-border, rgba(255, 255, 255, 0.04));
-  /* 中性叠加(微妙背景填充,用 list hover token 适配亮/暗) */
+  /* Neutral fills (subtle background fills, using list hover tokens to adapt to light/dark) */
   --fill-soft: var(--vscode-list-hoverBackground, rgba(255, 255, 255, 0.04));
   --fill: var(--vscode-list-inactiveSelectionBackground, rgba(255, 255, 255, 0.08));
-  /* accent:薄荷绿品牌色(保留,不跟随主题) */
+  /* Accent: mint brand color (fixed, does not follow the theme) */
   --mint: #45e6a4;
   --mint-soft: #8ff0c2;
   --mint-glow: rgba(69, 230, 164, 0.35);
@@ -222,7 +223,7 @@ body {
   color: var(--ink-faint);
 }
 
-/* === 自定义 Select === */
+/* === Custom Select === */
 .select {
   position: relative;
   width: 100%;
@@ -433,7 +434,7 @@ body {
   padding-right: 4px;
 }
 
-/* 内部滚动容器细滚动条(覆盖 webview 注入的粗滚动条) */
+/* Slim scrollbars for inner scroll containers (override the thick scrollbars injected by the webview) */
 .commit-list::-webkit-scrollbar,
 .file-scroll::-webkit-scrollbar {
   width: 5px;

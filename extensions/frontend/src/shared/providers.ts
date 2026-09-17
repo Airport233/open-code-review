@@ -11,7 +11,7 @@ export interface OcrProviderPreset {
   models: string[];
 }
 
-/** 与 internal/llm/providers.go 内置 registry 对齐 */
+/** Aligned with the built-in registry in internal/llm/providers.go */
 export const PROVIDER_PRESETS: OcrProviderPreset[] = [
   {
     name: 'anthropic',

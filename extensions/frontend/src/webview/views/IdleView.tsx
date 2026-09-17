@@ -42,21 +42,21 @@ export function IdleView({ gitState, modeFiles, filesLoading, configured, onMode
 
   const switchMode = (m: ReviewMode) => { setMode(m); onModeChange(m); };
 
-  // 分支两端都选好后,拉取 diff 文件列表
+  // Fetch the diff file list once both branch endpoints are selected
   useEffect(() => {
     if (mode === ReviewMode.Branch && from && to) onRequestModeFiles(ReviewMode.Branch, from, to);
   }, [mode, from, to]);
 
-  // 选中某 commit 后,拉取该 commit 文件列表
+  // Fetch the file list of a commit once it is selected
   useEffect(() => {
     if (mode === ReviewMode.Commit && commit) onRequestModeFiles(ReviewMode.Commit, undefined, undefined, commit);
   }, [mode, commit]);
 
   const files = mode === ReviewMode.Workspace ? gitState.workspaceFiles : modeFiles;
-  // 仅在「确实发起了请求」时显示 loading:分支需选满两端,提交需选中 commit。
+  // Show loading only when a request was actually fired: branch needs both endpoints, commit needs a selected commit.
   const willRequest = mode === ReviewMode.Workspace || (mode === ReviewMode.Branch && !!from && !!to) || (mode === ReviewMode.Commit && !!commit);
   const loading = filesLoading && willRequest;
-  // 可发起审查的前置条件:按 tab 校验选择已就绪,且有待审查文件、不在加载/审查中。
+  // Preconditions for starting a review: the per-tab selection is complete, files are pending review, and nothing is loading/reviewing.
   const selectionReady =
     mode === ReviewMode.Workspace || (mode === ReviewMode.Branch && !!from && !!to) || (mode === ReviewMode.Commit && !!commit);
   const canReview = configured && !running && !loading && selectionReady && files.length > 0;
