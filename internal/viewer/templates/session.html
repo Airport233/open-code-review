@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<nav class="breadcrumb"><a href="/" class="nav-brand"><span class="brand-icon"></span>Open Code Review Viewer</a><span class="sep">/</span><a href="/r/{{.EncodedRepo}}">{{.RepoName}}</a><span class="sep">/</span><span class="current">{{.Session.Summary.SessionID | truncate 12}}</span></nav>
+{{template "app-header" .}}
 <main>
 <div class="session-header">
     <div class="page-heading">
@@ -37,11 +37,11 @@
 <div class="token-summary">
     <h3>Coverage</h3>
     <div class="token-stats">
-        <div class="token-item"><div class="token-value">{{.Session.Summary.SelectedCount}}</div><div class="token-label">Selected</div></div>
-        <div class="token-item"><div class="token-value">{{.Session.Summary.CompletedCount}}</div><div class="token-label">Completed</div></div>
-        <div class="token-item"><div class="token-value">{{.Session.Summary.ReusedCount}}</div><div class="token-label">Reused</div></div>
-        <div class="token-item"><div class="token-value{{if .Session.Summary.FailedCount}} badge-error{{end}}">{{.Session.Summary.FailedCount}}</div><div class="token-label">Failed</div></div>
-        <div class="token-item"><div class="token-value">{{.Session.Summary.WaivedCount}}</div><div class="token-label">Waived</div></div>
+        <div class="token-item"><div class="token-label">Selected</div><div class="token-value">{{.Session.Summary.SelectedCount}}</div></div>
+        <div class="token-item"><div class="token-label">Completed</div><div class="token-value">{{.Session.Summary.CompletedCount}}</div></div>
+        <div class="token-item"><div class="token-label">Reused</div><div class="token-value">{{.Session.Summary.ReusedCount}}</div></div>
+        <div class="token-item"><div class="token-label">Failed</div><div class="token-value{{if .Session.Summary.FailedCount}} token-value-error{{end}}">{{.Session.Summary.FailedCount}}</div></div>
+        <div class="token-item"><div class="token-label">Waived</div><div class="token-value">{{.Session.Summary.WaivedCount}}</div></div>
     </div>
 </div>
 {{end}}
@@ -50,35 +50,35 @@
     <h3>Token Usage</h3>
     <div class="token-stats">
         <div class="token-item">
-            <div class="token-value" title="{{.Session.TokenUsage.TotalPromptTokens}}">{{formatNumber .Session.TokenUsage.TotalPromptTokens}}</div>
             <div class="token-label">Prompt Tokens</div>
+            <div class="token-value" title="{{.Session.TokenUsage.TotalPromptTokens}}">{{formatNumber .Session.TokenUsage.TotalPromptTokens}}</div>
         </div>
         <div class="token-item">
-            <div class="token-value" title="{{.Session.TokenUsage.TotalCompletionTokens}}">{{formatNumber .Session.TokenUsage.TotalCompletionTokens}}</div>
             <div class="token-label">Completion Tokens</div>
+            <div class="token-value" title="{{.Session.TokenUsage.TotalCompletionTokens}}">{{formatNumber .Session.TokenUsage.TotalCompletionTokens}}</div>
         </div>
         <div class="token-item">
-            <div class="token-value" title="{{add .Session.TokenUsage.TotalPromptTokens .Session.TokenUsage.TotalCompletionTokens}}">{{formatNumber (add .Session.TokenUsage.TotalPromptTokens .Session.TokenUsage.TotalCompletionTokens)}}</div>
             <div class="token-label">Total Tokens</div>
+            <div class="token-value" title="{{add .Session.TokenUsage.TotalPromptTokens .Session.TokenUsage.TotalCompletionTokens}}">{{formatNumber (add .Session.TokenUsage.TotalPromptTokens .Session.TokenUsage.TotalCompletionTokens)}}</div>
         </div>
         <div class="token-item">
-            <div class="token-value" title="{{.Session.TokenUsage.RequestCount}}">{{formatNumber .Session.TokenUsage.RequestCount}}</div>
             <div class="token-label">LLM Requests</div>
+            <div class="token-value" title="{{.Session.TokenUsage.RequestCount}}">{{formatNumber .Session.TokenUsage.RequestCount}}</div>
         </div>
         {{if or .Session.TokenUsage.TotalCacheReadTokens .Session.TokenUsage.TotalCacheWriteTokens}}
         <div class="token-item">
-            <div class="token-value" title="{{.Session.TokenUsage.TotalCacheReadTokens}}">{{formatNumber .Session.TokenUsage.TotalCacheReadTokens}}</div>
             <div class="token-label">Cache Read</div>
+            <div class="token-value" title="{{.Session.TokenUsage.TotalCacheReadTokens}}">{{formatNumber .Session.TokenUsage.TotalCacheReadTokens}}</div>
         </div>
         <div class="token-item">
-            <div class="token-value" title="{{.Session.TokenUsage.TotalCacheWriteTokens}}">{{formatNumber .Session.TokenUsage.TotalCacheWriteTokens}}</div>
             <div class="token-label">Cache Write</div>
+            <div class="token-value" title="{{.Session.TokenUsage.TotalCacheWriteTokens}}">{{formatNumber .Session.TokenUsage.TotalCacheWriteTokens}}</div>
         </div>
         {{end}}
         {{if .Session.Summary.LLMFailures}}
         <div class="token-item">
-            <div class="token-value badge-error">{{.Session.Summary.LLMFailures}}</div>
             <div class="token-label">LLM Failures</div>
+            <div class="token-value token-value-error">{{.Session.Summary.LLMFailures}}</div>
         </div>
         {{end}}
     </div>
@@ -99,7 +99,7 @@
                         <td title="{{.PromptTokens}}">{{formatNumber .PromptTokens}}</td>
                         <td title="{{.CompletionTokens}}">{{formatNumber .CompletionTokens}}</td>
                         {{if or $.Session.TokenUsage.TotalCacheReadTokens $.Session.TokenUsage.TotalCacheWriteTokens}}<td title="{{.CacheReadTokens}}">{{formatNumber .CacheReadTokens}}</td><td title="{{.CacheWriteTokens}}">{{formatNumber .CacheWriteTokens}}</td>{{end}}
-                        <td title="{{add .PromptTokens .CompletionTokens}}"><strong>{{formatNumber (add .PromptTokens .CompletionTokens)}}</strong></td>
+                        <td title="{{add .PromptTokens .CompletionTokens}}">{{formatNumber (add .PromptTokens .CompletionTokens)}}</td>
                     </tr>
                 {{end}}
                 </tbody>
@@ -173,7 +173,7 @@
                     {{if .SuggestionCode}}
                     <div class="code-panel code-suggestion">
                         <div class="code-panel-label">Suggested Change</div>
-                        <pre><code>{{.SuggestionCode}}</code></pre>
+                        <pre{{if $numbered}} class="code-gutter-offset"{{end}}><code>{{.SuggestionCode}}</code></pre>
                     </div>
                     {{end}}
                 </div>
@@ -248,6 +248,8 @@
 </main>
 </body>
 </html>
+
+{{define "breadcrumbs"}}<span class="sep">/</span><a href="/r/{{.EncodedRepo}}">{{.RepoName}}</a><span class="sep">/</span><span class="current">{{.Session.Summary.SessionID | truncate 12}}</span>{{end}}
 
 {{define "task-cards"}}
 <details class="file-accordion">
