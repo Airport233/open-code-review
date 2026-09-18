@@ -35,14 +35,15 @@ class CliServiceTreeKillTest {
         val grandchildPid: Long
         try {
             val service = CliService(cliPath = script.absolutePath)
-            val runner = thread { runCatching { service.runRaw(emptyList(), dir, {}) } }
+            val cancellation = CliCancellation()
+            val runner = thread { runCatching { service.runRaw(emptyList(), dir, {}, cancellation = cancellation) } }
 
             // 等孙进程起来
             assertTrue(waitFor(pidFile::exists, 5_000), "fake launcher 未及时写出孙进程 pid")
             grandchildPid = pidFile.readText().trim().toLong()
             assertTrue(isAlive(grandchildPid), "孙进程应在运行中")
 
-            service.cancel()
+            cancellation.cancel()
 
             // 优雅宽限 3s + 调度余量；修复前孙进程会永远存活（孤儿），修复后被快照追杀
             assertTrue(

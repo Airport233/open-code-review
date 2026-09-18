@@ -15,6 +15,19 @@ import kotlin.test.assertEquals
  */
 class ReviewSessionTest {
 
+    @Test
+    fun `incomplete and unknown results cannot report a clean review`() {
+        for (status in listOf("partial", "failed", "", "future_status")) {
+            assertEquals(ReviewState.FAILED, resultToState(result(status)), status)
+        }
+    }
+
+    @Test
+    fun `complete results and partial findings remain visible`() {
+        assertEquals(ReviewState.EMPTY, resultToState(result("complete")))
+        assertEquals(ReviewState.DONE, resultToState(result("partial", comments = 1)))
+    }
+
     private fun result(status: String, comments: Int = 0) =
         CliResult(status = status, comments = List(comments) { ReviewComment(path = "a.ts") })
 
