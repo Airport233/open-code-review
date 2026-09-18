@@ -40,7 +40,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-          cache: gradle
+        # No actions/cache for Gradle: this job runs on the self-hosted host
+        # (no container), so ~/.gradle already persists between runs — the IDE
+        # distribution is downloaded once and reused. Uploading a multi-GB
+        # cache archive after every run only risks stalling the job.
 
       - name: Test
         run: ./gradlew test -PskipFrontend=true
