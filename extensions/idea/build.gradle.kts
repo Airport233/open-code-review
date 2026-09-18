@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 alibaba/open-code-review Contributors
+
 plugins {
     id("java")
     id("org.jetbrains.kotlin.jvm") version "2.1.0"

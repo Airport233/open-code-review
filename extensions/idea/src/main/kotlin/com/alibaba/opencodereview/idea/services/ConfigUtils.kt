@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 alibaba/open-code-review Contributors
+
 package com.alibaba.opencodereview.idea.services
 
 import com.alibaba.opencodereview.idea.model.OcrConfig
