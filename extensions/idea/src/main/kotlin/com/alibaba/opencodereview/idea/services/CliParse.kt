@@ -11,6 +11,11 @@ import com.alibaba.opencodereview.idea.model.ReviewMode
 import com.alibaba.opencodereview.idea.model.ReviewSummary
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * CLI snake_case JSON 与插件 camelCase 契约之间的唯一转换点。
@@ -19,8 +24,8 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 private data class CliCommentDto(
-    val path: String = "",
-    val content: String = "",
+    val path: String,
+    val content: String,
     @SerialName("suggestion_code") val suggestionCode: String? = null,
     @SerialName("existing_code") val existingCode: String? = null,
     @SerialName("start_line") val startLine: Int = 0,
@@ -40,9 +45,9 @@ private data class CliSummaryDto(
 
 @Serializable
 private data class CliResultDto(
-    val status: String = "",
+    val status: String,
     val message: String? = null,
-    val comments: List<CliCommentDto> = emptyList(),
+    val comments: List<CliCommentDto>?,
     val warnings: List<AgentWarning> = emptyList(),
     val summary: CliSummaryDto? = null,
 )
@@ -74,21 +79,74 @@ private fun CliCommentDto.toComment(): ReviewComment = ReviewComment(
     thinking = thinking?.takeIf(String::isNotEmpty),
 )
 
-/**
- * 从 stdout 中查找并反序列化 CLI JSON 结果。
- * 不假设第一个 `{` 即起点，避免前置日志混入 `{` 导致解析失败。
- */
-private fun findCliResultDto(stdout: String): CliResultDto {
-    val end = stdout.lastIndexOf('}')
-    require(end >= 0) { "no JSON in CLI output" }
-    var start = stdout.indexOf('{')
-    while (start in 0..end) {
-        runCatching { OcrJson.decodeFromString(CliResultDto.serializer(), stdout.substring(start, end + 1)) }
-            .getOrNull()
-            ?.let { return it }
-        start = stdout.indexOf('{', start + 1)
+/** Find complete top-level values without interpreting braces inside JSON strings. */
+private fun jsonCandidates(stdout: String): Sequence<String> = sequence {
+    var start = -1
+    var depth = 0
+    var quoted = false
+    var escaped = false
+    for ((index, char) in stdout.withIndex()) {
+        if (start < 0) {
+            if (char != '{' && char != '[') continue
+            start = index
+            depth = 1
+            continue
+        }
+        if (quoted) {
+            if (escaped) escaped = false
+            else when (char) {
+                '\\' -> escaped = true
+                '"' -> quoted = false
+            }
+        } else {
+            when (char) {
+                '"' -> quoted = true
+                '{', '[' -> depth++
+                '}', ']' -> depth--
+            }
+            if (depth == 0) {
+                yield(stdout.substring(start, index + 1))
+                start = -1
+            }
+        }
     }
-    throw IllegalArgumentException("no JSON in CLI output")
+    // An incomplete result must not be hidden by an earlier successful-looking value.
+    if (start >= 0) yield(stdout.substring(start))
+}
+
+private val RESULT_FIELD = Regex("\"(?:status|comments)\"\\s*:")
+
+/** Accept one validated review result; unrelated log objects cannot become empty results. */
+private fun findCliResultDto(stdout: String): CliResultDto {
+    var result: CliResultDto? = null
+    for (candidate in jsonCandidates(stdout)) {
+        val element = try {
+            OcrJson.parseToJsonElement(candidate)
+        } catch (error: SerializationException) {
+            require(!RESULT_FIELD.containsMatchIn(candidate)) { "Invalid review JSON in CLI output" }
+            continue
+        }
+        val obj = element as? JsonObject ?: continue
+        if ("status" !in obj && "comments" !in obj) continue
+        val status = obj["status"] as? JsonPrimitive
+        require(status?.isString == true && status.content in supportedReviewStatuses) {
+            "Missing or unsupported review status in CLI output"
+        }
+        require("comments" in obj && (obj["comments"] is JsonArray || obj["comments"] == JsonNull)) {
+            "Missing or invalid review comments in CLI output"
+        }
+        val dto = try {
+            OcrJson.decodeFromJsonElement(CliResultDto.serializer(), obj)
+        } catch (error: SerializationException) {
+            throw IllegalArgumentException("Invalid review result in CLI output", error)
+        }
+        require(dto.comments.orEmpty().all { it.path.isNotBlank() && it.content.isNotBlank() }) {
+            "Invalid review comment in CLI output"
+        }
+        require(result == null) { "Multiple review results in CLI output" }
+        result = dto
+    }
+    return result ?: throw IllegalArgumentException("No valid review result in CLI output")
 }
 
 fun parseCliResult(stdout: String): CliResult {
@@ -96,7 +154,7 @@ fun parseCliResult(stdout: String): CliResult {
     return CliResult(
         status = dto.status,
         message = dto.message,
-        comments = dto.comments.map { it.toComment() },
+        comments = dto.comments.orEmpty().map { it.toComment() },
         warnings = dto.warnings,
         summary = dto.summary?.let {
             ReviewSummary(

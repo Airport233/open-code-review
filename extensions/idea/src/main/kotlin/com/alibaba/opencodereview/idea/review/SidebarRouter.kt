@@ -141,10 +141,9 @@ class SidebarRouter(
 
         val options = msg.options
         val context = options.toReviewContext()
-        // 先终止可能仍在运行的上一轮：否则其 onState/onLog/onDone 回调会继续投递过时消息，与新一轮结果交错。
-        session.getAndSet(null)?.cancel { }
         val current = ReviewSession(cli, cwd)
-        session.set(current)
+        // Replace atomically so concurrent starts cannot lose an uncancelled session.
+        session.getAndSet(current)?.cancel { }
         // 再清除上一轮的行标记，避免新旧两轮的高亮在同一文件上叠加。
         comments.clear()
 

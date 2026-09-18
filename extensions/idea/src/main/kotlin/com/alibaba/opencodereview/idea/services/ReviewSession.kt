@@ -9,12 +9,15 @@ import com.intellij.openapi.progress.ProcessCanceledException
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
-/** 有评论则 done，无评论但 CLI 报错则 failed，否则 empty。 */
-private const val STATUS_COMPLETED_WITH_ERRORS = "completed_with_errors"
+internal val supportedReviewStatuses = setOf(
+    "success", "complete", "completed_with_warnings", "completed_with_errors", "partial", "failed", "skipped",
+)
 
+/** Only recognized, non-failing terminal results can report an empty review. */
 fun resultToState(result: CliResult): ReviewState = when {
+    result.status !in supportedReviewStatuses -> ReviewState.FAILED
     result.comments.isNotEmpty() -> ReviewState.DONE
-    result.status == STATUS_COMPLETED_WITH_ERRORS -> ReviewState.FAILED
+    result.status in setOf("completed_with_errors", "partial", "failed") -> ReviewState.FAILED
     else -> ReviewState.EMPTY
 }
 
@@ -30,9 +33,11 @@ interface SessionCallbacks {
  */
 class ReviewSession(private val cli: CliService, private val cwd: File) {
 
+    private val cancellation = CliCancellation()
+
     @Volatile
     private var cancelled = false
-    /** cancel 入口的原子锁：两个并发 cancel() 只有一个能通过 CAS，避免重复 cli.cancel()/onState(CANCELLED)。 */
+    /** Only one caller can cancel this session and publish its cancellation state. */
     private val cancelEntered = AtomicBoolean(false)
 
     fun run(opts: CliRunOptions, cb: SessionCallbacks) {
@@ -43,12 +48,18 @@ class ReviewSession(private val cli: CliService, private val cwd: File) {
         }
         cb.onState(ReviewState.RUNNING)
         try {
-            val result = cli.review(opts, cwd, cb::onLog)
+            val result = cli.review(opts, cwd, cb::onLog, cancellation)
             if (cancelled) {
                 cb.onState(ReviewState.CANCELLED)
                 return
             }
-            cb.onState(resultToState(result))
+            val state = resultToState(result)
+            val incomplete = result.status in setOf("completed_with_errors", "partial", "failed")
+            val error = if (state == ReviewState.FAILED || incomplete) {
+                result.message?.takeIf(String::isNotBlank) ?: "Review did not complete successfully (${result.status})"
+            } else null
+            if (error != null) cb.onLog(LogLine("[ocr] $error", LogLevel.ERROR))
+            cb.onState(state, error.takeIf { state == ReviewState.FAILED })
             cb.onDone(result)
         } catch (error: Exception) {
             // 只接 Exception：OOM/LinkageError 等 Error 不在此吞，让其上抛，避免掩盖致命问题。
@@ -65,10 +76,10 @@ class ReviewSession(private val cli: CliService, private val cwd: File) {
     }
 
     fun cancel(onState: (ReviewState) -> Unit) {
-        // 原子进入：并发 cancel 只有一个通过 CAS，避免重复 cli.cancel()/onState。
+        // The cancellation handle belongs to this session, including before run() starts.
         if (!cancelEntered.compareAndSet(false, true)) return
         cancelled = true
-        cli.cancel()
+        cancellation.cancel()
         onState(ReviewState.CANCELLED)
     }
 }

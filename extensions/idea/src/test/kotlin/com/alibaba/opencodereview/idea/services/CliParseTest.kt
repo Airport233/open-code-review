@@ -13,6 +13,61 @@ import kotlin.test.assertTrue
 class CliParseTest {
 
     @Test
+    fun `unrelated JSON cannot become a clean review`() {
+        for (output in listOf("{}", """{"event":"finished"}""", """{"status":"success"}""")) {
+            assertFailsWith<IllegalArgumentException>(output) { parseCliResult(output) }
+        }
+    }
+
+    @Test
+    fun `trailing JSON does not replace actual findings`() {
+        val output = """{"status":"success","comments":[{"path":"a.kt","content":"A finding"}]}""" +
+            "\n" + """{"event":"finished"}"""
+        assertEquals("A finding", parseCliResult(output).comments.single().content)
+    }
+
+    @Test
+    fun `malformed review cannot fall back to a trailing log object`() {
+        val output = """{"status":"success","comments":"broken"}""" + "\n{}"
+        assertFailsWith<IllegalArgumentException> { parseCliResult(output) }
+    }
+
+    @Test
+    fun `multiple review results are rejected as ambiguous`() {
+        val result = """{"status":"success","comments":[]}"""
+        assertFailsWith<IllegalArgumentException> { parseCliResult("$result\n$result") }
+    }
+
+    @Test
+    fun `JSON string braces and escapes do not split results`() {
+        val output = """{"event":"starting"}
+            {"status":"complete","comments":[{"path":"a.kt","content":"Use {x} and \"quoted\" text"}]}
+            {"event":"finished"}
+        """.trimIndent()
+        assertEquals("Use {x} and \"quoted\" text", parseCliResult(output).comments.single().content)
+    }
+
+    @Test
+    fun `null comments from Go are a valid empty list`() {
+        assertEquals(emptyList(), parseCliResult("""{"status":"complete","comments":null}""").comments)
+    }
+
+    @Test
+    fun `invalid status and malformed comments are rejected`() {
+        for (output in listOf(
+            """{"status":"","comments":[]}""",
+            """{"status":"future_status","comments":[]}""",
+            """{"status":42,"comments":[]}""",
+            """{"status":"success","comments":[{}]}""",
+            """{"status":"success","comments":[{"path":"a.kt","content":""}]}""",
+            """[{"status":"success","comments":[]}]""",
+            """{"status":"success","summary":{"files_reviewed":1}""",
+        )) {
+            assertFailsWith<IllegalArgumentException>(output) { parseCliResult(output) }
+        }
+    }
+
+    @Test
     fun `workspace 模式不带 ref 参数`() {
         assertEquals(
             listOf("review", "--format", "json"),
