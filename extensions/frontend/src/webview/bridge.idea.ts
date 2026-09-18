@@ -2,6 +2,7 @@
 // Copyright 2026 alibaba/open-code-review Contributors
 
 import { HostToWebview, WebviewToHost } from '../shared/messages';
+import type { Bridge } from './bridge';
 
 /**
  * The only file under frontend/ that diverges from upstream; everything else is
@@ -41,7 +42,7 @@ window.__ocrReceive = (msg: unknown): void => {
   });
 };
 
-export const bridge = {
+export const bridge: Bridge = {
   post(msg: WebviewToHost): void {
     const post = window.__ocrPost;
     if (!post) {

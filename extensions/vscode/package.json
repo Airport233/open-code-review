@@ -90,7 +90,7 @@
     "package": "vsce package --no-yarn",
     "vscode:prepublish": "npm run build",
     "build:extension": "webpack --mode production",
-    "build:webview": "cd ../frontend && OCR_TARGET=vscode npm run build"
+    "build:webview": "cd ../frontend && npm install && OCR_TARGET=vscode npm run build"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
